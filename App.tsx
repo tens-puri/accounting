@@ -72,7 +72,14 @@ const App: React.FC = () => {
     if (transactions.length === 0) return;
     setAiLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      // ดึง API_KEY อย่างปลอดภัย
+      const apiKey = (typeof process !== 'undefined' && process.env?.API_KEY) || '';
+      if (!apiKey) {
+        setAiInsight("ไม่พบ API_KEY ในระบบ โปรดตั้งค่าใน Vercel Settings");
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       const summary = transactions
         .filter(t => t.type === 'รายจ่าย')
         .map(t => `- ${t.category}: ${t.description} (${t.total_price} บาท)`)
@@ -80,13 +87,13 @@ const App: React.FC = () => {
       
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `นี่คือรายการรายจ่ายของ Puri และ Phurita ในเดือนนี้:\n${summary}\n\nกรุณาสรุปภาพรวมสั้นๆ ว่าใช้เงินไปกับอะไรมากที่สุด และให้คำแนะนำในการออมเงิน 3 ข้อที่เป็นประโยชน์ (ตอบเป็นภาษาไทยด้วยภาษากันเองแต่สุภาพ)`,
+        contents: `นี่คือรายการรายจ่ายของ Puri และ Phurita ในเดือนนี้:\n${summary}\n\nกรุณาสรุปภาพรวมสั้นๆ และแนะนำวิธีประหยัดเงิน (ตอบเป็นภาษาไทย)`,
       });
       
       setAiInsight(response.text || "AI ไม่สามารถวิเคราะห์ได้ในขณะนี้");
     } catch (error) {
       console.error('AI error:', error);
-      setAiInsight("กรุณาตรวจสอบการตั้งค่า API_KEY ใน Environment Variables");
+      setAiInsight("เกิดข้อผิดพลาดในการเรียกใช้ AI");
     } finally {
       setAiLoading(false);
     }
