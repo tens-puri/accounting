@@ -1,7 +1,7 @@
 
 import { Category, Owner, TransactionType } from './types';
 
-export const CATEGORIES: Category[] = [
+export const EXPENSE_CATEGORIES: Category[] = [
   'ของกิน',
   'ของใช้',
   'ลูก',
@@ -10,6 +10,17 @@ export const CATEGORIES: Category[] = [
   'ลงทุน',
   'ฟุ่มเฟือย'
 ];
+
+export const INCOME_CATEGORIES: Category[] = [
+  'เงินเดือน',
+  'ดอกเบี้ย',
+  'กดเงินจากบัตร',
+  'ขอเงินจากคนอื่น',
+  'อื่นๆ'
+];
+
+// For backward compatibility or general list
+export const CATEGORIES: Category[] = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
 
 export const OWNERS: Owner[] = ['puri', 'phurita'];
 

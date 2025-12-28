@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { CATEGORIES, OWNERS, TYPES } from '../constants';
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, OWNERS, TYPES } from '../constants';
 import { Category, Owner, TransactionType } from '../types';
 import { Save, Calendar, Tag, User, Hash, DollarSign } from 'lucide-react';
 
@@ -22,6 +22,19 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
   });
 
   const totalPrice = formData.quantity * formData.price_per_unit;
+
+  // เลือกรายการหมวดหมู่ตามประเภทที่ User เลือก
+  const currentCategories = formData.type === 'รายรับ' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+
+  // ฟังก์ชันสลับประเภทรายการ และเปลี่ยนหมวดหมู่เริ่มต้นให้เหมาะสม
+  const handleTypeChange = (type: TransactionType) => {
+    const defaultCategory = type === 'รายรับ' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0];
+    setFormData({
+      ...formData,
+      type,
+      category: defaultCategory
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,7 +92,7 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
             <input 
               type="date" 
               required
-              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
               value={formData.date}
               onChange={e => setFormData({...formData, date: e.target.value})}
             />
@@ -93,7 +106,7 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
                 <button
                   key={t}
                   type="button"
-                  onClick={() => setFormData({...formData, type: t})}
+                  onClick={() => handleTypeChange(t)}
                   className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${formData.type === t ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}
                 >
                   {t}
@@ -102,17 +115,17 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
             </div>
           </div>
 
-          {/* Category Dropdown */}
+          {/* Category Dropdown (DYNAMCIALLY CHANGES) */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-              <Tag className="w-4 h-4" /> หมวดหมู่
+              <Tag className="w-4 h-4" /> หมวดหมู่ {formData.type}
             </label>
             <select 
-              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
               value={formData.category}
               onChange={e => setFormData({...formData, category: e.target.value as Category})}
             >
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {currentCategories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
 
@@ -122,7 +135,7 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
               <User className="w-4 h-4" /> เจ้าของรายการ
             </label>
             <select 
-              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
               value={formData.owner}
               onChange={e => setFormData({...formData, owner: e.target.value as Owner})}
             >
@@ -137,8 +150,8 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
           <input 
             type="text" 
             required
-            placeholder="เช่น ค่าข้าวเย็น, เงินเดือน, ค่าที่พัก..."
-            className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+            placeholder={formData.type === 'รายรับ' ? "เช่น เงินเดือนเดือน ธ.ค., ดอกเบี้ยออมทรัพย์..." : "เช่น ค่าข้าวเย็น, ค่าที่พัก..."}
+            className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
             value={formData.description}
             onChange={e => setFormData({...formData, description: e.target.value})}
           />
@@ -152,7 +165,7 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
             <input 
               type="number" 
               min="1"
-              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
               value={formData.quantity}
               onChange={e => setFormData({...formData, quantity: parseInt(e.target.value) || 0})}
             />
@@ -163,7 +176,7 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
             </label>
             <input 
               type="number" 
-              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
               value={formData.price_per_unit}
               onChange={e => setFormData({...formData, price_per_unit: parseInt(e.target.value) || 0})}
             />
