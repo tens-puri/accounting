@@ -78,11 +78,11 @@ const App: React.FC = () => {
     
     setAiLoading(true);
     try {
-      // ดึง API Key จาก Environment (ลองทุกรูปแบบ)
+      // getEnv จะลองดึงทั้ง API_KEY และ NEXT_PUBLIC_API_KEY ให้โดยอัตโนมัติ
       const apiKey = getEnv('API_KEY');
       
       if (!apiKey) {
-        setAiInsight("ไม่พบ API Key ในระบบ! กรุณาตรวจสอบว่าใน Vercel ได้ตั้งชื่อตัวแปรว่า NEXT_PUBLIC_API_KEY หรือไม่");
+        setAiInsight("ไม่พบ API Key ในระบบ! กรุณาตรวจสอบการตั้งค่า Environment Variables");
         setShowKeyWarning(true);
         setAiLoading(false);
         return;
@@ -106,13 +106,11 @@ const App: React.FC = () => {
       });
       
       setAiInsight(response.text || "AI มึนตึ้บ วิเคราะห์ไม่ได้เฉยเลย ลองกดอีกทีนะ");
+      setShowKeyWarning(false);
     } catch (error: any) {
       console.error('AI error:', error);
-      if (error.message?.includes('API key not valid')) {
-        setAiInsight("API Key ของคุณไม่ถูกต้อง หรือหมดอายุแล้วจ้า ลองเช็คใน Google AI Studio นะ");
-      } else {
-        setAiInsight("เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI ลองใหม่อีกครั้งนะ");
-      }
+      setAiInsight("เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI ลองเช็ค API Key อีกครั้งนะ");
+      setShowKeyWarning(true);
     } finally {
       setAiLoading(false);
     }
@@ -222,16 +220,17 @@ const App: React.FC = () => {
               <button onClick={() => setAiInsight("")} className="text-slate-400 hover:text-slate-600 text-xs font-bold uppercase">ปิด</button>
             </div>
             <p className="text-indigo-800 text-sm leading-relaxed whitespace-pre-line font-medium">{aiInsight}</p>
+            
             {showKeyWarning && (
               <div className="mt-4 p-4 bg-white/50 rounded-2xl border border-indigo-100">
                  <p className="text-xs text-indigo-600 font-bold flex items-center gap-2 mb-2">
-                   <Settings className="w-3 h-3" /> วิธีแก้: ไปที่ Vercel Dashboard > Settings > Environment Variables
+                   <Settings className="w-3 h-3" /> วิธีตั้งค่าให้ AI ทำงาน:
                  </p>
                  <ol className="text-xs text-slate-600 list-decimal ml-4 space-y-1">
-                   <li>ลบตัวแปร <b>API_KEY</b> เดิมออก</li>
-                   <li>เพิ่มตัวแปรใหม่ชื่อ <b>NEXT_PUBLIC_API_KEY</b></li>
-                   <li>ใส่ค่า API Key อันเดิมของคุณ แล้วกด Save</li>
-                   <li>กลับไปที่หน้า <b>Deployments</b> แล้วกด <b>Redeploy</b> ครับ</li>
+                   <li>ไปที่ Vercel Dashboard ของคุณ</li>
+                   <li>เลือก Settings → Environment Variables</li>
+                   <li>เพิ่มชื่อ <b>NEXT_PUBLIC_API_KEY</b> แล้วใส่ค่า Gemini Key</li>
+                   <li>กด Save แล้วไปที่หน้า Deployments เพื่อกด <b>Redeploy</b> ครับ</li>
                  </ol>
               </div>
             )}
