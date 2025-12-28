@@ -1,9 +1,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://fpwhdrkxyingupoisjso.supabase.co';
-const supabaseAnonKey = 'sb_publishable_73DQMvJIAX8imsgj1zKx4Q_F_qVy5K1';
+// ใน Vercel ให้ตั้งค่า Environment Variables เหล่านี้ในหน้า Project Settings
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://fpwhdrkxyingupoisjso.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_73DQMvJIAX8imsgj1zKx4Q_F_qVy5K1';
 
-// Note: Using the key provided by the user. 
-// In a real production app, these should come from process.env.NEXT_PUBLIC_...
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
