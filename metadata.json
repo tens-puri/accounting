@@ -1,0 +1,5 @@
+{
+  "name": "Puri & Phurita Accounting",
+  "description": "A comprehensive income and expense tracking application designed for Puri and Phurita, featuring real-time Supabase integration, detailed filtering, and AI-powered financial insights.",
+  "requestFramePermissions": []
+}

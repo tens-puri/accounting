@@ -1,0 +1,202 @@
+
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { CATEGORIES, OWNERS, TYPES } from '../constants';
+import { Category, Owner, TransactionType } from '../types';
+import { Save, Calendar, Tag, User, Hash, DollarSign } from 'lucide-react';
+
+interface Props {
+  onSuccess: () => void;
+}
+
+const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    type: 'รายจ่าย' as TransactionType,
+    description: '',
+    category: 'ของกิน' as Category,
+    quantity: 1,
+    price_per_unit: 0,
+    owner: 'puri' as Owner
+  });
+
+  const totalPrice = formData.quantity * formData.price_per_unit;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const dateObj = new Date(formData.date);
+    const payload = {
+      day: dateObj.getDate(),
+      month: dateObj.getMonth() + 1,
+      year: dateObj.getFullYear(),
+      type: formData.type,
+      description: formData.description,
+      category: formData.category,
+      quantity: formData.quantity,
+      price_per_unit: formData.price_per_unit,
+      total_price: totalPrice,
+      owner: formData.owner
+    };
+
+    try {
+      const { error } = await supabase.from('transactions').insert([payload]);
+      if (error) throw error;
+      onSuccess();
+      setFormData({
+        ...formData,
+        description: '',
+        price_per_unit: 0,
+        quantity: 1
+      });
+    } catch (error) {
+      console.error('Insert error:', error);
+      alert('บันทึกข้อมูลไม่สำเร็จ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
+      <div className="p-8 border-b border-slate-100 bg-slate-50/50">
+        <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <PlusCircleIcon className="w-6 h-6 text-indigo-600" />
+          บันทึกรายการใหม่
+        </h2>
+        <p className="text-sm text-slate-500 mt-1">กรอกรายละเอียดรายรับหรือรายจ่ายของคุณ</p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-8 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Date Picker */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <Calendar className="w-4 h-4" /> วันที่
+            </label>
+            <input 
+              type="date" 
+              required
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+              value={formData.date}
+              onChange={e => setFormData({...formData, date: e.target.value})}
+            />
+          </div>
+
+          {/* Type Dropdown */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700">ประเภทหลัก</label>
+            <div className="flex p-1 bg-slate-100 rounded-2xl">
+              {TYPES.map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setFormData({...formData, type: t})}
+                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${formData.type === t ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Category Dropdown */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <Tag className="w-4 h-4" /> หมวดหมู่
+            </label>
+            <select 
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+              value={formData.category}
+              onChange={e => setFormData({...formData, category: e.target.value as Category})}
+            >
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {/* Owner Dropdown */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <User className="w-4 h-4" /> เจ้าของรายการ
+            </label>
+            <select 
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+              value={formData.owner}
+              onChange={e => setFormData({...formData, owner: e.target.value as Owner})}
+            >
+              {OWNERS.map(o => <option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Description */}
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">รายละเอียด</label>
+          <input 
+            type="text" 
+            required
+            placeholder="เช่น ค่าข้าวเย็น, เงินเดือน, ค่าที่พัก..."
+            className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+            value={formData.description}
+            onChange={e => setFormData({...formData, description: e.target.value})}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <Hash className="w-4 h-4" /> จำนวน
+            </label>
+            <input 
+              type="number" 
+              min="1"
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+              value={formData.quantity}
+              onChange={e => setFormData({...formData, quantity: parseInt(e.target.value) || 0})}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <DollarSign className="w-4 h-4" /> ราคาต่อหน่วย
+            </label>
+            <input 
+              type="number" 
+              className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 transition-all"
+              value={formData.price_per_unit}
+              onChange={e => setFormData({...formData, price_per_unit: parseInt(e.target.value) || 0})}
+            />
+          </div>
+          <div className="col-span-2 md:col-span-1 bg-indigo-50 rounded-2xl p-4 flex flex-col justify-center border border-indigo-100">
+            <p className="text-xs text-indigo-600 font-bold uppercase tracking-wider">รวมทั้งสิ้น</p>
+            <p className="text-2xl font-black text-indigo-900">{totalPrice.toLocaleString()} ฿</p>
+          </div>
+        </div>
+
+        <button 
+          disabled={loading}
+          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {loading ? <RefreshCwIcon className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+          บันทึกรายการ
+        </button>
+      </form>
+    </div>
+  );
+};
+
+// Helper internal components to avoid external imports
+const PlusCircleIcon = ({className}: {className: string}) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const RefreshCwIcon = ({className}: {className: string}) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+  </svg>
+);
+
+export default TransactionForm;
