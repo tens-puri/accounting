@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase, getEnv } from './lib/supabase';
 import { Transaction, FilterOptions, Owner, TransactionType, Category } from './types';
 import { CATEGORIES, OWNERS, TYPES, MONTHS, YEARS } from './constants';
 import TransactionForm from './components/TransactionForm';
@@ -14,7 +14,8 @@ import {
   TrendingDown,
   Filter,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Settings
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 
@@ -24,6 +25,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [aiInsight, setAiInsight] = useState<string>("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [showKeyWarning, setShowKeyWarning] = useState(false);
 
   const [filters, setFilters] = useState<FilterOptions>({
     month: new Date().getMonth() + 1,
@@ -69,31 +71,48 @@ const App: React.FC = () => {
   };
 
   const generateAIInsight = async () => {
-    if (transactions.length === 0) return;
+    if (transactions.length === 0) {
+      setAiInsight("ยังไม่มีข้อมูลในเดือนนี้ให้วิเคราะห์จ้า ลองเพิ่มรายการดูก่อนนะ");
+      return;
+    }
+    
     setAiLoading(true);
     try {
-      // ดึง API_KEY อย่างปลอดภัย
-      const apiKey = (typeof process !== 'undefined' && process.env?.API_KEY) || '';
+      // ดึง API Key จาก Environment (ลองทุกรูปแบบ)
+      const apiKey = getEnv('API_KEY');
+      
       if (!apiKey) {
-        setAiInsight("ไม่พบ API_KEY ในระบบ โปรดตั้งค่าใน Vercel Settings");
+        setAiInsight("ไม่พบ API Key ในระบบ! กรุณาตรวจสอบว่าใน Vercel ได้ตั้งชื่อตัวแปรว่า NEXT_PUBLIC_API_KEY หรือไม่");
+        setShowKeyWarning(true);
+        setAiLoading(false);
         return;
       }
 
       const ai = new GoogleGenAI({ apiKey });
-      const summary = transactions
+      const expenseSummary = transactions
         .filter(t => t.type === 'รายจ่าย')
-        .map(t => `- ${t.category}: ${t.description} (${t.total_price} บาท)`)
+        .map(t => `- ${t.category}: ${t.description} (${t.total_price} ฿)`)
         .join('\n');
       
+      if (!expenseSummary) {
+        setAiInsight("เดือนนี้ยังไม่มีรายจ่ายเลย เยี่ยมมาก! เก็บออมให้เต็มที่นะ");
+        setAiLoading(false);
+        return;
+      }
+
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `นี่คือรายการรายจ่ายของ Puri และ Phurita ในเดือนนี้:\n${summary}\n\nกรุณาสรุปภาพรวมสั้นๆ และแนะนำวิธีประหยัดเงิน (ตอบเป็นภาษาไทย)`,
+        contents: `นี่คือรายการรายจ่ายของครอบครัวเรา:\n${expenseSummary}\n\nช่วยสรุปสั้นๆ ว่าใช้เงินไปกับอะไรเยอะที่สุด และแนะนำวิธีประหยัดในหมวดนั้นๆ ให้ Puri และ Phurita หน่อย (ตอบเป็นภาษาไทย เป็นกันเองแบบคนในครอบครัว)`,
       });
       
-      setAiInsight(response.text || "AI ไม่สามารถวิเคราะห์ได้ในขณะนี้");
-    } catch (error) {
+      setAiInsight(response.text || "AI มึนตึ้บ วิเคราะห์ไม่ได้เฉยเลย ลองกดอีกทีนะ");
+    } catch (error: any) {
       console.error('AI error:', error);
-      setAiInsight("เกิดข้อผิดพลาดในการเรียกใช้ AI");
+      if (error.message?.includes('API key not valid')) {
+        setAiInsight("API Key ของคุณไม่ถูกต้อง หรือหมดอายุแล้วจ้า ลองเช็คใน Google AI Studio นะ");
+      } else {
+        setAiInsight("เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI ลองใหม่อีกครั้งนะ");
+      }
     } finally {
       setAiLoading(false);
     }
@@ -203,6 +222,19 @@ const App: React.FC = () => {
               <button onClick={() => setAiInsight("")} className="text-slate-400 hover:text-slate-600 text-xs font-bold uppercase">ปิด</button>
             </div>
             <p className="text-indigo-800 text-sm leading-relaxed whitespace-pre-line font-medium">{aiInsight}</p>
+            {showKeyWarning && (
+              <div className="mt-4 p-4 bg-white/50 rounded-2xl border border-indigo-100">
+                 <p className="text-xs text-indigo-600 font-bold flex items-center gap-2 mb-2">
+                   <Settings className="w-3 h-3" /> วิธีแก้: ไปที่ Vercel Dashboard > Settings > Environment Variables
+                 </p>
+                 <ol className="text-xs text-slate-600 list-decimal ml-4 space-y-1">
+                   <li>ลบตัวแปร <b>API_KEY</b> เดิมออก</li>
+                   <li>เพิ่มตัวแปรใหม่ชื่อ <b>NEXT_PUBLIC_API_KEY</b></li>
+                   <li>ใส่ค่า API Key อันเดิมของคุณ แล้วกด Save</li>
+                   <li>กลับไปที่หน้า <b>Deployments</b> แล้วกด <b>Redeploy</b> ครับ</li>
+                 </ol>
+              </div>
+            )}
           </div>
         )}
 
