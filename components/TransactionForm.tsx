@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, OWNERS, TYPES } from '../constants';
 import { Category, Owner, TransactionType } from '../types';
-import { Save, Calendar, Tag, User, Hash, DollarSign } from 'lucide-react';
+import { Save, Calendar, Tag, User, Hash, DollarSign, AlertCircle } from 'lucide-react';
 
 interface Props {
   onSuccess: () => void;
@@ -11,6 +11,7 @@ interface Props {
 
 const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     type: 'รายจ่าย' as TransactionType,
@@ -34,11 +35,13 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
       type,
       category: defaultCategory
     });
+    setErrorMsg(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg(null);
 
     const dateObj = new Date(formData.date);
     const payload = {
@@ -56,7 +59,14 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
 
     try {
       const { error } = await supabase.from('transactions').insert([payload]);
-      if (error) throw error;
+      if (error) {
+        // จัดการกรณี Error จาก Check Constraint ใน DB
+        if (error.code === '23514') {
+          throw new Error(`หมวดหมู่ "${formData.category}" ยังไม่ได้รับการอนุญาตในฐานข้อมูล (Check Constraint Error)`);
+        }
+        throw error;
+      }
+      
       onSuccess();
       setFormData({
         ...formData,
@@ -64,16 +74,17 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
         price_per_unit: 0,
         quantity: 1
       });
-    } catch (error) {
+      alert('บันทึกข้อมูลเรียบร้อยแล้ว!');
+    } catch (error: any) {
       console.error('Insert error:', error);
-      alert('บันทึกข้อมูลไม่สำเร็จ');
+      setErrorMsg(error.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อฐานข้อมูล');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
+    <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden mb-8">
       <div className="p-8 border-b border-slate-100 bg-slate-50/50">
         <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           <PlusCircleIcon className="w-6 h-6 text-indigo-600" />
@@ -82,7 +93,17 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
         <p className="text-sm text-slate-500 mt-1">กรอกรายละเอียดรายรับหรือรายจ่ายของคุณ</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-8 space-y-6">
+      <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
+        {errorMsg && (
+          <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-start gap-3 text-rose-700">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+               <p className="font-bold">บันทึกไม่สำเร็จ</p>
+               <p className="opacity-90">{errorMsg}</p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Date Picker */}
           <div className="space-y-2">
@@ -115,7 +136,7 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
             </div>
           </div>
 
-          {/* Category Dropdown (DYNAMCIALLY CHANGES) */}
+          {/* Category Dropdown */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
               <Tag className="w-4 h-4" /> หมวดหมู่ {formData.type}
@@ -199,7 +220,7 @@ const TransactionForm: React.FC<Props> = ({ onSuccess }) => {
   );
 };
 
-// Helper internal components to avoid external imports
+// Helper internal components
 const PlusCircleIcon = ({className}: {className: string}) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
