@@ -80,7 +80,7 @@ const App: React.FC = () => {
 
     setAiLoading(true);
     try {
-      const apiKey = getEnv('API_KEY');
+      const apiKey = getEnv('NEXT_PUBLIC_API_KEY');
 
       if (!apiKey) {
         setAiInsight("ไม่พบ API Key ในระบบ! กรุณาตรวจสอบการตั้งค่า Environment Variables");
