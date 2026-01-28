@@ -1,149 +1,419 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { Budget, FilterOptions, Owner, Transaction } from '../types';
+import CreditCardBillsWidget from './CreditCardBillsWidget';
+import { PiggyBank, Wallet, AlertTriangle, PlusCircle, Save } from 'lucide-react';
 
-import React, { useMemo } from 'react';
-import { Transaction, FilterOptions } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { MONTHS, YEARS } from '../constants';
-
-interface Props {
+type Props = {
   transactions: Transaction[];
   filters: FilterOptions;
-  setFilters: (f: FilterOptions) => void;
-}
+  setFilters: (v: FilterOptions) => void;
+};
 
-const Dashboard: React.FC<Props> = ({ transactions, filters, setFilters }) => {
-  const categoryData = useMemo(() => {
-    const expenses = transactions.filter(t => t.type === 'รายจ่าย');
-    const data: { name: string; value: number }[] = [];
-    const map = new Map<string, number>();
+const EXPENSE_CATEGORIES: string[] = [
+  'ของกิน',
+  'ของใช้',
+  'ลูก',
+  'บ้าน',
+  'รถ',
+  'ลงทุน',
+  'ฟุ่มเฟือย',
+  'อื่นๆ',
+];
 
-    expenses.forEach(t => {
-      map.set(t.category, (map.get(t.category) || 0) + t.total_price);
-    });
+const OWNER_OPTIONS: Owner[] = ['puri', 'phurita'];
 
-    map.forEach((value, name) => data.push({ name, value }));
-    return data.sort((a, b) => b.value - a.value);
+const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
+  const month = filters.month || new Date().getMonth() + 1;
+  const year = filters.year || new Date().getFullYear();
+  const owner = filters.owner || 'all';
+
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [budgetLoading, setBudgetLoading] = useState(false);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
+
+  const [installmentMonthly, setInstallmentMonthly] = useState(0);
+  const [creditDue, setCreditDue] = useState(0);
+
+  // ✅ ฟอร์มเพิ่มงบใหม่ (UX ใหม่)
+  const [newBudget, setNewBudget] = useState({
+    owner: (owner === 'all' ? 'puri' : owner) as Owner,
+    category: EXPENSE_CATEGORIES[0],
+    monthly_limit: 0,
+  });
+
+  // ✅ เก็บค่าที่ผู้ใช้แก้ในรายการเดิม (ไม่ใช้ onBlur)
+  const [editLimitMap, setEditLimitMap] = useState<Record<string, number>>({}); // key = budget.id
+
+  // 1) รายจ่ายเงินสด/โอน (ไม่รวมบัตรเครดิต)
+  const cashExpense = useMemo(() => {
+    const list = transactions.filter(t => t.type === 'รายจ่าย');
+    const cashOnly = list.filter(t => (t.payment_method ?? 'เงินสด') !== 'บัตรเครดิต');
+    return cashOnly.reduce((s, t) => s + (Number(t.total_price) || 0), 0);
   }, [transactions]);
 
-  const dailyData = useMemo(() => {
-    const dataMap = new Map<number, { day: number; income: number; expense: number }>();
-    
-    // Fill all days of month
-    const daysInMonth = new Date(filters.year || 2024, filters.month || 1, 0).getDate();
-    for (let i = 1; i <= daysInMonth; i++) {
-      dataMap.set(i, { day: i, income: 0, expense: 0 });
+  // 2) รายจ่ายทั้งหมดตามวันที่ใช้จริง (รวมบัตรเครดิต)
+  const realExpense = useMemo(() => {
+    const list = transactions.filter(t => t.type === 'รายจ่าย');
+    return list.reduce((s, t) => s + (Number(t.total_price) || 0), 0);
+  }, [transactions]);
+
+  // ✅ คำนวณใช้ไปต่อหมวด (จาก transactions เดือนที่เลือก)
+  const spentByCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.type !== 'รายจ่าย') continue;
+      const key = String(t.category);
+      const prev = map.get(key) || 0;
+      map.set(key, prev + (Number(t.total_price) || 0));
     }
+    return map;
+  }, [transactions]);
 
-    transactions.forEach(t => {
-      const entry = dataMap.get(t.day);
-      if (entry) {
-        if (t.type === 'รายรับ') entry.income += t.total_price;
-        else entry.expense += t.total_price;
-      }
-    });
+  const fetchBudgets = async () => {
+    setBudgetLoading(true);
+    setBudgetError(null);
+    try {
+      let q = supabase.from('budgets').select('*').order('created_at', { ascending: false });
+      if (owner !== 'all') q = q.eq('owner', owner);
 
-    return Array.from(dataMap.values());
-  }, [transactions, filters.month, filters.year]);
+      const { data, error } = await q;
+      if (error) throw error;
 
-  const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4'];
+      const rows = (data || []) as Budget[];
+      setBudgets(rows);
+
+      // ✅ sync ค่า editLimitMap ให้มีค่าเริ่มต้นตาม DB
+      const init: Record<string, number> = {};
+      for (const b of rows) init[b.id] = Number(b.monthly_limit) || 0;
+      setEditLimitMap(init);
+    } catch (e: any) {
+      setBudgetError(e.message || 'ดึงข้อมูลงบประมาณไม่สำเร็จ');
+    } finally {
+      setBudgetLoading(false);
+    }
+  };
+
+  const fetchInstallmentsMonthly = async () => {
+    try {
+      let q = supabase
+        .from('installments')
+        .select('monthly_amount, status, owner')
+        .eq('status', 'active');
+
+      if (owner !== 'all') q = q.eq('owner', owner);
+
+      const { data, error } = await q;
+      if (error) throw error;
+
+      const sum = (data || []).reduce((s: number, r: any) => s + (Number(r.monthly_amount) || 0), 0);
+      setInstallmentMonthly(sum);
+    } catch {
+      setInstallmentMonthly(0);
+    }
+  };
+
+  const fetchCreditDue = async () => {
+    try {
+      let q = supabase
+        .from('credit_card_bills')
+        .select('amount, status, due_month, due_year, owner')
+        .eq('status', 'pending')
+        .eq('due_month', month)
+        .eq('due_year', year);
+
+      if (owner !== 'all') q = q.eq('owner', owner);
+
+      const { data, error } = await q;
+      if (error) throw error;
+
+      const sum = (data || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+      setCreditDue(sum);
+    } catch {
+      setCreditDue(0);
+    }
+  };
+
+  useEffect(() => {
+    fetchBudgets();
+    fetchInstallmentsMonthly();
+    fetchCreditDue();
+
+    // เมื่อ owner filter เปลี่ยน ให้ตั้ง owner ของฟอร์มเพิ่มงบใหม่ตาม
+    setNewBudget(prev => ({
+      ...prev,
+      owner: (owner === 'all' ? 'puri' : owner) as Owner,
+    }));
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month, year, owner]);
+
+  const cashObligationThisMonth = cashExpense + installmentMonthly + creditDue;
+
+  // ✅ เพิ่ม/อัปเดตงบ (upsert)
+  const upsertBudget = async (ownerVal: string, category: string, limit: number) => {
+    setBudgetLoading(true);
+    setBudgetError(null);
+    try {
+      const { error } = await supabase.from('budgets').upsert(
+        [{ owner: ownerVal, category, monthly_limit: limit }],
+        { onConflict: 'owner,category' }
+      );
+      if (error) throw error;
+      await fetchBudgets();
+    } catch (e: any) {
+      setBudgetError(e.message || 'บันทึกงบประมาณไม่สำเร็จ');
+    } finally {
+      setBudgetLoading(false);
+    }
+  };
+
+  // ✅ กดบันทึกงบใหม่
+  const handleAddBudget = async () => {
+    const limit = Number(newBudget.monthly_limit) || 0;
+    if (limit <= 0) {
+      setBudgetError('กรุณาใส่งบ/เดือน มากกว่า 0');
+      return;
+    }
+    await upsertBudget(String(newBudget.owner), String(newBudget.category), limit);
+    setBudgetError(null);
+    setNewBudget(prev => ({ ...prev, monthly_limit: 0 }));
+  };
+
+  // ✅ กดบันทึกการแก้ไขงบเดิม (ชัดกว่า onBlur)
+  const handleSaveExisting = async (b: Budget) => {
+    const newLimit = Number(editLimitMap[b.id] ?? b.monthly_limit) || 0;
+    if (newLimit <= 0) {
+      setBudgetError('กรุณาใส่งบ/เดือน มากกว่า 0');
+      return;
+    }
+    await upsertBudget(String(b.owner), String(b.category), newLimit);
+  };
 
   return (
-    <div className="space-y-8">
-      {/* Date Filters Dashboard Top */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center justify-between">
-         <h2 className="text-xl font-bold text-slate-800">สรุปภาพรวมรายเดือน</h2>
-         <div className="flex gap-2">
-            <select 
-              className="bg-slate-50 border-none rounded-xl px-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-indigo-500"
-              value={filters.month}
-              onChange={(e) => setFilters({...filters, month: Number(e.target.value)})}
-            >
-              {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-            </select>
-            <select 
-              className="bg-slate-50 border-none rounded-xl px-4 py-2 text-sm font-semibold focus:ring-2 focus:ring-indigo-500"
-              value={filters.year}
-              onChange={(e) => setFilters({...filters, year: Number(e.target.value)})}
-            >
-              {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-         </div>
-      </div>
+    <div className="space-y-6">
+      {/* ภาระเงินสดเดือนนี้ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600">
+              <Wallet className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm text-slate-500 font-bold">ภาระเงินสดเดือนนี้</p>
+              <p className="text-2xl font-black text-slate-900">
+                {cashObligationThisMonth.toLocaleString()} ฿
+              </p>
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Trend Chart */}
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-          <h3 className="font-bold text-slate-700 mb-6 flex items-center gap-2">แนวโน้มรายวัน</h3>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                <Tooltip 
-                  cursor={{fill: '#f8fafc'}} 
-                  contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
-                />
-                <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} barSize={10} name="รายรับ" />
-                <Bar dataKey="expense" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={10} name="รายจ่าย" />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="mt-4 space-y-2 text-sm font-bold text-slate-600">
+            <div className="flex justify-between">
+              <span>รายจ่าย (เงินสด/โอน)</span>
+              <span>{cashExpense.toLocaleString()} ฿</span>
+            </div>
+            <div className="flex justify-between">
+              <span>งวดผ่อน (รวม)</span>
+              <span>{installmentMonthly.toLocaleString()} ฿</span>
+            </div>
+            <div className="flex justify-between">
+              <span>บัตรเครดิตถึงกำหนด</span>
+              <span>{creditDue.toLocaleString()} ฿</span>
+            </div>
           </div>
         </div>
 
-        {/* Category Allocation */}
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-          <h3 className="font-bold text-slate-700 mb-6 flex items-center gap-2">สัดส่วนรายจ่ายตามหมวดหมู่</h3>
-          {categoryData.length > 0 ? (
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
-                  />
-                  <Legend iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
+        <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-rose-50 text-rose-600">
+              <AlertTriangle className="w-6 h-6" />
             </div>
-          ) : (
-            <div className="h-[300px] flex items-center justify-center text-slate-400">ไม่มีข้อมูลรายจ่าย</div>
-          )}
+            <div>
+              <p className="text-sm text-slate-500 font-bold">รายจ่ายตามวันที่ใช้จริง</p>
+              <p className="text-2xl font-black text-slate-900">
+                {realExpense.toLocaleString()} ฿
+              </p>
+            </div>
+          </div>
+          <p className="text-sm text-slate-500 mt-4 font-medium">
+            (รวมรายการรูดบัตรเครดิตด้วย เพื่อดูพฤติกรรมการใช้เงิน)
+          </p>
+        </div>
+
+        <div className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-600">
+              <PiggyBank className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm text-slate-500 font-bold">เคล็ดลับใช้งาน</p>
+              <p className="text-sm text-slate-700 font-medium mt-2">
+                ตั้งงบต่อหมวด แล้วดูเปอร์เซ็นต์ใกล้เต็ม จะช่วยคุมรายจ่ายได้ดีมากครับ
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-      
-      {/* Top Expenses List */}
-      <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-        <h3 className="font-bold text-slate-700 mb-6">หมวดหมู่ที่ใช้เงินมากที่สุด</h3>
-        <div className="space-y-4">
-          {categoryData.slice(0, 3).map((cat, idx) => (
-            <div key={cat.name} className="space-y-2">
-              <div className="flex justify-between text-sm font-bold">
-                <span className="text-slate-600">{cat.name}</span>
-                <span className="text-slate-900">{cat.value.toLocaleString()} ฿</span>
+
+      {/* บิลบัตรเครดิต (pending) */}
+      <CreditCardBillsWidget month={month} year={year} owner={owner as any} />
+
+      {/* งบประมาณรายเดือน */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+          <h3 className="font-black text-slate-900">งบประมาณรายเดือน (Budget)</h3>
+          <p className="text-sm text-slate-500 mt-1">
+            เพิ่มงบใหม่ได้จากฟอร์มด้านล่าง และแก้ไขงบเดิมได้ทันที
+          </p>
+        </div>
+
+        {budgetError && (
+          <div className="p-4 text-rose-700 bg-rose-50 border-b border-rose-100 font-medium">
+            {budgetError}
+          </div>
+        )}
+
+        <div className="p-6 space-y-6">
+          {/* ✅ ฟอร์มเพิ่มงบใหม่ (UX ใหม่ชัดๆ) */}
+          <div className="border border-slate-100 rounded-3xl p-5 bg-white">
+            <div className="flex items-center gap-2 mb-3">
+              <PlusCircle className="w-5 h-5 text-indigo-600" />
+              <p className="font-black text-slate-900">เพิ่มงบประมาณใหม่</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-500">Owner</label>
+                <select
+                  className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 font-black text-slate-700"
+                  value={newBudget.owner}
+                  onChange={(e) => setNewBudget(prev => ({ ...prev, owner: e.target.value as Owner }))}
+                >
+                  {OWNER_OPTIONS.map(o => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
               </div>
-              <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-                <div 
-                  className="h-full rounded-full transition-all duration-1000" 
-                  style={{ 
-                    width: `${(cat.value / categoryData.reduce((a,b) => a + b.value, 0)) * 100}%`,
-                    backgroundColor: COLORS[idx % COLORS.length]
-                  }}
+
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-xs font-black text-slate-500">หมวดรายจ่าย</label>
+                <select
+                  className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 font-black text-slate-700"
+                  value={newBudget.category}
+                  onChange={(e) => setNewBudget(prev => ({ ...prev, category: e.target.value }))}
+                >
+                  {EXPENSE_CATEGORIES.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-500">งบ/เดือน (บาท)</label>
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 font-black text-slate-700"
+                  value={newBudget.monthly_limit}
+                  onChange={(e) => setNewBudget(prev => ({ ...prev, monthly_limit: Number(e.target.value || 0) }))}
+                  placeholder="เช่น 3000"
                 />
               </div>
             </div>
-          ))}
+
+            <button
+              onClick={handleAddBudget}
+              disabled={budgetLoading}
+              className="mt-4 w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 py-3 rounded-2xl shadow-lg shadow-indigo-200 disabled:opacity-50"
+              type="button"
+            >
+              เพิ่ม/บันทึกงบ
+            </button>
+          </div>
+
+          {/* รายการงบเดิม */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <p className="font-black text-slate-900">งบที่ตั้งไว้</p>
+              <button
+                onClick={fetchBudgets}
+                disabled={budgetLoading}
+                className="px-4 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 font-black text-slate-700 disabled:opacity-50"
+                type="button"
+              >
+                รีเฟรช
+              </button>
+            </div>
+
+            {budgetLoading && budgets.length === 0 ? (
+              <div className="text-slate-500 font-medium">กำลังโหลดงบประมาณ...</div>
+            ) : budgets.length === 0 ? (
+              <div className="text-slate-500 font-medium">
+                ยังไม่มีงบประมาณ — ลองเพิ่มงบหมวด “ของกิน / บ้าน / ฟุ่มเฟือย” ก่อนครับ
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {budgets.map(b => {
+                  const catKey = String(b.category);
+                  const spent = spentByCategory.get(catKey) || 0;
+                  const limit = Number(editLimitMap[b.id] ?? b.monthly_limit) || 0;
+                  const percent = limit > 0 ? Math.min(100, (spent / limit) * 100) : 0;
+                  const warn = percent >= 80;
+
+                  return (
+                    <div key={b.id} className="border border-slate-100 rounded-3xl p-5">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                          <p className="font-black text-slate-900">{catKey}</p>
+                          <p className="text-sm text-slate-500 font-bold">
+                            ใช้ไป {spent.toLocaleString()} / {limit.toLocaleString()} ฿
+                            {warn ? <span className="ml-2 text-rose-600">ใกล้เต็ม!</span> : null}
+                            <span className="ml-2 text-slate-400">• owner: {b.owner}</span>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            className="w-36 bg-slate-50 border-none rounded-2xl px-3 py-2 font-black text-slate-700"
+                            value={limit}
+                            onChange={(e) => {
+                              const v = Number(e.target.value || 0);
+                              setEditLimitMap(prev => ({ ...prev, [b.id]: v }));
+                            }}
+                          />
+                          <button
+                            onClick={() => handleSaveExisting(b)}
+                            disabled={budgetLoading}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2 rounded-2xl flex items-center gap-2 disabled:opacity-50"
+                            type="button"
+                          >
+                            <Save className="w-4 h-4" />
+                            บันทึก
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-3 rounded-full transition-all ${warn ? 'bg-rose-500' : 'bg-indigo-600'}`}
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Tip */}
+          <div className="bg-slate-50 border border-slate-100 rounded-3xl p-5">
+            <p className="font-black text-slate-800">Tip</p>
+            <p className="text-sm text-slate-600 font-medium mt-1">
+              ถ้าอยากคุมเงินจริง ๆ ให้ตั้งงบ “ของกิน + ฟุ่มเฟือย + บ้าน” ก่อน แล้วดูเปอร์เซ็นต์ใกล้เต็มครับ
+            </p>
+          </div>
         </div>
       </div>
     </div>

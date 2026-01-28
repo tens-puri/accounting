@@ -20,7 +20,7 @@ export interface Transaction {
   price_per_unit: number;
   total_price: number;
   owner: Owner;
-  payment_method?: PaymentMethod | null; // ✅ เพิ่มใหม่
+  payment_method?: PaymentMethod | null;
   created_at?: string;
 }
 
@@ -31,4 +31,42 @@ export interface FilterOptions {
   type?: TransactionType | 'all';
   category?: Category | 'all';
   sortBy?: 'price_desc' | 'date_desc';
+}
+
+/** Budgets */
+export interface Budget {
+  id: string;
+  owner: Owner;
+  category: Category;
+  monthly_limit: number;
+  created_at: string;
+}
+
+/** Credit card bills */
+export type CreditBillStatus = 'pending' | 'paid' | 'canceled';
+
+export interface CreditCardBill {
+  id: string;
+  owner: Owner;
+  source_transaction_id: string | null;
+  amount: number;
+  due_month: number;
+  due_year: number;
+  status: CreditBillStatus;
+  note: string | null;
+  created_at: string;
+}
+
+/** Recurring templates (for quick copy) */
+export interface RecurringTemplate {
+  id: string;
+  owner: Owner;
+  name: string;
+  type: TransactionType;
+  category: Category;
+  description: string;
+  quantity: number;
+  price_per_unit: number;
+  payment_method: PaymentMethod | null;
+  created_at: string;
 }
