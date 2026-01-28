@@ -80,7 +80,7 @@ const App: React.FC = () => {
 
     setAiLoading(true);
     try {
-      const apiKey = getEnv('NEXT_PUBLIC_API_KEY');
+      const apiKey = "AIzaSyDE_roWFdxRkoRfv5vLfVbWv9AGhjmPNWc";
 
       if (!apiKey) {
         setAiInsight("ไม่พบ API Key ในระบบ! กรุณาตรวจสอบการตั้งค่า Environment Variables");
@@ -130,9 +130,9 @@ const App: React.FC = () => {
         <div className="p-6">
           <h1 className="text-2xl font-bold text-indigo-600 flex items-center gap-2">
             <LayoutDashboard className="w-8 h-8" />
-            Accounting
+            รายรับรายจ่าย
           </h1>
-          <p className="text-sm text-slate-500 font-medium">Puri & Phurita Family</p>
+          <p className="text-sm text-slate-500 font-medium">Puri & Phurita</p>
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
@@ -181,7 +181,7 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="p-4 md:p-8 max-w-6xl mx-auto">
         <div className="md:hidden flex items-center justify-between mb-6">
-          <h1 className="text-xl font-black text-indigo-600 tracking-tight">P&P ACCOUNT</h1>
+          <h1 className="text-xl font-black text-indigo-600 tracking-tight">รายรับรายจ่าย</h1>
           <div className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-1.5 rounded-full text-sm font-bold shadow-md shadow-indigo-100">
             {(totals.income - totals.expense).toLocaleString()} ฿
           </div>
