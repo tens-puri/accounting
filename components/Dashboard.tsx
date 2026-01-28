@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Budget, FilterOptions, Owner, Transaction } from '../types';
 import CreditCardBillsWidget from './CreditCardBillsWidget';
-import { PiggyBank, Wallet, AlertTriangle, PlusCircle, Save } from 'lucide-react';
+import { PiggyBank, Wallet, AlertTriangle, PlusCircle, Save, RefreshCw } from 'lucide-react';
 
 type Props = {
   transactions: Transaction[];
@@ -35,14 +35,14 @@ const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
   const [installmentMonthly, setInstallmentMonthly] = useState(0);
   const [creditDue, setCreditDue] = useState(0);
 
-  // ✅ ฟอร์มเพิ่มงบใหม่ (UX ใหม่)
+  // ✅ ฟอร์มเพิ่มงบใหม่
   const [newBudget, setNewBudget] = useState({
     owner: (owner === 'all' ? 'puri' : owner) as Owner,
     category: EXPENSE_CATEGORIES[0],
     monthly_limit: 0,
   });
 
-  // ✅ เก็บค่าที่ผู้ใช้แก้ในรายการเดิม (ไม่ใช้ onBlur)
+  // ✅ เก็บค่าที่ผู้ใช้แก้ในรายการเดิม
   const [editLimitMap, setEditLimitMap] = useState<Record<string, number>>({}); // key = budget.id
 
   // 1) รายจ่ายเงินสด/โอน (ไม่รวมบัตรเครดิต)
@@ -58,7 +58,7 @@ const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
     return list.reduce((s, t) => s + (Number(t.total_price) || 0), 0);
   }, [transactions]);
 
-  // ✅ คำนวณใช้ไปต่อหมวด (จาก transactions เดือนที่เลือก)
+  // ✅ คำนวณใช้ไปต่อหมวด
   const spentByCategory = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of transactions) {
@@ -83,7 +83,7 @@ const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
       const rows = (data || []) as Budget[];
       setBudgets(rows);
 
-      // ✅ sync ค่า editLimitMap ให้มีค่าเริ่มต้นตาม DB
+      // sync ค่า editLimitMap
       const init: Record<string, number> = {};
       for (const b of rows) init[b.id] = Number(b.monthly_limit) || 0;
       setEditLimitMap(init);
@@ -139,7 +139,6 @@ const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
     fetchInstallmentsMonthly();
     fetchCreditDue();
 
-    // เมื่อ owner filter เปลี่ยน ให้ตั้ง owner ของฟอร์มเพิ่มงบใหม่ตาม
     setNewBudget(prev => ({
       ...prev,
       owner: (owner === 'all' ? 'puri' : owner) as Owner,
@@ -150,7 +149,6 @@ const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
 
   const cashObligationThisMonth = cashExpense + installmentMonthly + creditDue;
 
-  // ✅ เพิ่ม/อัปเดตงบ (upsert)
   const upsertBudget = async (ownerVal: string, category: string, limit: number) => {
     setBudgetLoading(true);
     setBudgetError(null);
@@ -168,7 +166,6 @@ const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
     }
   };
 
-  // ✅ กดบันทึกงบใหม่
   const handleAddBudget = async () => {
     const limit = Number(newBudget.monthly_limit) || 0;
     if (limit <= 0) {
@@ -180,7 +177,6 @@ const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
     setNewBudget(prev => ({ ...prev, monthly_limit: 0 }));
   };
 
-  // ✅ กดบันทึกการแก้ไขงบเดิม (ชัดกว่า onBlur)
   const handleSaveExisting = async (b: Budget) => {
     const newLimit = Number(editLimitMap[b.id] ?? b.monthly_limit) || 0;
     if (newLimit <= 0) {
@@ -274,7 +270,7 @@ const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
         )}
 
         <div className="p-6 space-y-6">
-          {/* ✅ ฟอร์มเพิ่มงบใหม่ (UX ใหม่ชัดๆ) */}
+          {/* เพิ่มงบใหม่ */}
           <div className="border border-slate-100 rounded-3xl p-5 bg-white">
             <div className="flex items-center gap-2 mb-3">
               <PlusCircle className="w-5 h-5 text-indigo-600" />
@@ -331,16 +327,19 @@ const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
             </button>
           </div>
 
-          {/* รายการงบเดิม */}
+          {/* งบเดิม */}
           <div className="space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="font-black text-slate-900">งบที่ตั้งไว้</p>
+
+              {/* ✅ ปุ่มรีเฟรชแบบเดียวกับบัตรเครดิต (ไอคอนหมุนเมื่อ loading) */}
               <button
                 onClick={fetchBudgets}
                 disabled={budgetLoading}
-                className="px-4 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 font-black text-slate-700 disabled:opacity-50"
+                className="px-4 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 flex items-center gap-2 disabled:opacity-50"
                 type="button"
               >
+                <RefreshCw className={`w-4 h-4 ${budgetLoading ? 'animate-spin' : ''}`} />
                 รีเฟรช
               </button>
             </div>
@@ -407,7 +406,6 @@ const Dashboard: React.FC<Props> = ({ transactions, filters }) => {
             )}
           </div>
 
-          {/* Tip */}
           <div className="bg-slate-50 border border-slate-100 rounded-3xl p-5">
             <p className="font-black text-slate-800">Tip</p>
             <p className="text-sm text-slate-600 font-medium mt-1">
