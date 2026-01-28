@@ -64,12 +64,20 @@ const TransactionTable: React.FC<Props> = ({ transactions, loading, sortBy }) =>
             </div>
 
             {/* Category */}
-            <div className="flex items-center gap-2">
-               <div className="md:hidden text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 w-20">หมวดหมู่:</div>
-               <span className="bg-slate-50 text-slate-600 text-xs font-bold px-3 py-1 rounded-full border border-slate-100 flex items-center gap-1">
-                 <Tag className="w-3 h-3" /> {tx.category}
-               </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="md:hidden text-xs font-bold text-slate-400 uppercase tracking-widest mb-1 w-20">หมวดหมู่:</div>
+              <span className="bg-slate-50 text-slate-600 text-xs font-bold px-3 py-1 rounded-full border border-slate-100 flex items-center gap-1">
+              <Tag className="w-3 h-3" /> {tx.category}
+            </span>
+
+            {/* ✅ แสดงช่องทางชำระเงินเฉพาะรายจ่าย */}
+            {tx.type === 'รายจ่าย' && tx.payment_method && (
+            <span className="bg-indigo-50 text-indigo-600 text-xs font-bold px-3 py-1 rounded-full border border-indigo-100">
+            {tx.payment_method}
+            </span>
+             )}
             </div>
+
 
             {/* Owner */}
             <div className="flex items-center gap-2">

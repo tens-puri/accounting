@@ -1,11 +1,12 @@
-
 export type TransactionType = 'รายรับ' | 'รายจ่าย';
 
-export type Category = 
+export type Category =
   | 'ของกิน' | 'ของใช้' | 'ลูก' | 'บ้าน' | 'รถ' | 'ลงทุน' | 'ฟุ่มเฟือย'
   | 'เงินเดือน' | 'ดอกเบี้ย' | 'กดเงินจากบัตร' | 'ขอเงินจากคนอื่น' | 'อื่นๆ';
 
 export type Owner = 'puri' | 'phurita';
+
+export type PaymentMethod = 'เงินสด' | 'โอน/สแกน' | 'บัตรเครดิต';
 
 export interface Transaction {
   id?: string;
@@ -19,6 +20,7 @@ export interface Transaction {
   price_per_unit: number;
   total_price: number;
   owner: Owner;
+  payment_method?: PaymentMethod | null; // ✅ เพิ่มใหม่
   created_at?: string;
 }
 
