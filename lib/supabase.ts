@@ -24,7 +24,7 @@ export const getEnv = (key: string, defaultValue: string = '') => {
   return defaultValue;
 };
 
-const supabaseUrl = getEnv('SUPABASE_URL', 'https://fpwhdrkxyingupoisjso.supabase.co');
-const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY', 'sb_publishable_73DQMvJIAX8imsgj1zKx4Q_F_qVy5K1');
+const supabaseUrl = getEnv('SUPABASE_URL', 'https://okjbvudjgdtrhfnftfpt.supabase.co');
+const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY', 'sb_publishable_DoaoyRRcndz01QiJWTO85w_kWj_tY5s');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
