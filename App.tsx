@@ -80,16 +80,25 @@ const App: React.FC = () => {
 
     setAiLoading(true);
     try {
-      const apiKey = "AIzaSyDE_roWFdxRkoRfv5vLfVbWv9AGhjmPNWc";
+      // อ่าน API Key จาก Environment Variables (ไม่ฝัง Key ลงในโค้ดอีกต่อไป เพื่อความปลอดภัย)
+      // หมายเหตุ: ต้องอ้าง process.env.XXX แบบจุดตรงๆ เพราะ Vite (vite.config.ts) จะแทนค่าตอน build
+      // ถ้าใช้ getEnv(dynamic key) ค่าจะไม่ถูกแทนในเวอร์ชัน browser
+      let apiKey = '';
+      try { apiKey = process.env.NEXT_PUBLIC_API_KEY || ''; } catch (_) {}
+      try { if (!apiKey) apiKey = process.env.GEMINI_API_KEY || ''; } catch (_) {}
+      try { if (!apiKey) apiKey = process.env.API_KEY || ''; } catch (_) {}
+      try {
+        const m = (import.meta as any).env;
+        if (!apiKey && m) apiKey = m.VITE_GEMINI_API_KEY || m.VITE_API_KEY || '';
+      } catch (_) {}
 
       if (!apiKey) {
-        setAiInsight("ไม่พบ API Key ในระบบ! กรุณาตรวจสอบการตั้งค่า Environment Variables");
+        setAiInsight("ไม่พบ API Key ในระบบ! กรุณาตั้งค่า GEMINI_API_KEY ใน Environment Variables ก่อนนะ");
         setShowKeyWarning(true);
         setAiLoading(false);
         return;
       }
 
-      const ai = new GoogleGenAI({ apiKey });
       const expenseSummary = transactions
         .filter(t => t.type === 'รายจ่าย')
         .map(t => `- ${t.category}: ${t.description} (${t.total_price} ฿)`)
@@ -101,16 +110,19 @@ const App: React.FC = () => {
         return;
       }
 
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.5-flash',
         contents: `นี่คือรายการรายจ่ายของครอบครัวเรา:\n${expenseSummary}\n\nช่วยสรุปสั้นๆ ว่าใช้เงินไปกับอะไรเยอะที่สุด และแนะนำวิธีประหยัดในหมวดนั้นๆ ให้ Puri และ Phurita หน่อย (ตอบเป็นภาษาไทย เป็นกันเองแบบคนในครอบครัว)`,
       });
 
-      setAiInsight(response.text || "AI มึนตึ้บ วิเคราะห์ไม่ได้เฉยเลย ลองกดอีกทีนะ");
+      const text = (response.text || '').trim();
+      setAiInsight(text || "AI มึนตึ้บ วิเคราะห์ไม่ได้เฉยเลย ลองกดอีกทีนะ");
       setShowKeyWarning(false);
     } catch (error: any) {
       console.error('AI error:', error);
-      setAiInsight("เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI ลองเช็ค API Key อีกครั้งนะ");
+      const msg = error?.message || String(error);
+      setAiInsight(`เกิดข้อผิดพลาดในการเชื่อมต่อกับ AI ลองเช็ค API Key หรือโควต้าอีกครั้งนะ\n\nรายละเอียด: ${msg}`);
       setShowKeyWarning(true);
     } finally {
       setAiLoading(false);
@@ -247,9 +259,9 @@ const App: React.FC = () => {
                       <Settings className="w-3 h-3" /> วิธีตั้งค่าให้ AI ทำงาน:
                     </p>
                     <ol className="text-xs text-slate-600 list-decimal ml-4 space-y-1">
-                      <li>ไปที่ Vercel Dashboard ของคุณ</li>
-                      <li>เลือก Settings → Environment Variables</li>
-                      <li>เพิ่มชื่อ <b>NEXT_PUBLIC_API_KEY</b> แล้วใส่ค่า Gemini Key</li>
+                      <li>ขอ Gemini API Key ที่ <b>aistudio.google.com/apikey</b></li>
+                      <li><b>รันในเครื่อง:</b> สร้างไฟล์ <b>.env.local</b> แล้วใส่ <b>GEMINI_API_KEY=คีย์ของคุณ</b></li>
+                      <li><b>บน Vercel:</b> Settings → Environment Variables → เพิ่ม <b>GEMINI_API_KEY</b></li>
                       <li>กด Save แล้วไปที่หน้า Deployments เพื่อกด <b>Redeploy</b> ครับ</li>
                     </ol>
                   </div>
